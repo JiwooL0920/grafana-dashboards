@@ -7,7 +7,7 @@ spec:
   instanceSelector:
     matchLabels:
       dashboards: grafana
-  folder: agentic-ai
+  folderRef: agentic-ai
   resyncPeriod: 30s
   json: >
     {
