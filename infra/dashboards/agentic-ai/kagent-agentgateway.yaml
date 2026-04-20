@@ -1,0 +1,759 @@
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDashboard
+metadata:
+  name: kagent-agentgateway
+  namespace: monitoring
+spec:
+  instanceSelector:
+    matchLabels:
+      dashboards: grafana
+  folderRef: agentic-ai
+  resyncPeriod: 30s
+  json: >
+    {
+      "title": "kagent / agentgateway — Multi-Agent Platform",
+      "uid": "kagent-agentgateway",
+      "tags": ["kagent", "agentgateway", "multi-agent", "otel", "aiops"],
+      "timezone": "browser",
+      "schemaVersion": 38,
+      "refresh": "30s",
+      "time": { "from": "now-1h", "to": "now" },
+      "annotations": { "list": [] },
+      "links": [
+        {
+          "title": "Jaeger — kagent traces",
+          "url": "http://jaeger.local/search?service=kagent-controller",
+          "type": "link",
+          "targetBlank": true,
+          "icon": "external link"
+        },
+        {
+          "title": "Jaeger — agentgateway traces",
+          "url": "http://jaeger.local/search?service=agentgateway-proxy",
+          "type": "link",
+          "targetBlank": true,
+          "icon": "external link"
+        }
+      ],
+      "templating": {
+        "list": [
+          {
+            "name": "tool_provider",
+            "type": "query",
+            "datasource": { "type": "prometheus", "uid": "prometheus" },
+            "query": "label_values(kagent_tools_mcp_registered_tools, tool_provider)",
+            "includeAll": true,
+            "allValue": ".*",
+            "label": "Tool Provider",
+            "current": { "text": "All", "value": "$__all" },
+            "refresh": 2,
+            "sort": 1
+          }
+        ]
+      },
+      "panels": [
+        {
+          "id": 1,
+          "title": "Section: MCP Tool Invocations",
+          "type": "row",
+          "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 },
+          "collapsed": false,
+          "panels": []
+        },
+        {
+          "id": 2,
+          "title": "MCP Tool Call Rate (calls/min)",
+          "description": "Rate of MCP tool invocations across all kagent agents, broken down by tool_name and provider. Spikes indicate heavy delegation bursts.",
+          "type": "timeseries",
+          "gridPos": { "x": 0, "y": 1, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum by (tool_name, tool_provider) (rate(kagent_tools_mcp_invocations_total{tool_provider=~\"$tool_provider\"}[5m])) * 60",
+              "legendFormat": "{{tool_provider}} / {{tool_name}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqpm",
+              "color": { "mode": "palette-classic" },
+              "custom": { "lineWidth": 1.5, "fillOpacity": 5 }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "sum"] },
+            "tooltip": { "mode": "multi" }
+          }
+        },
+        {
+          "id": 3,
+          "title": "Top 10 Tools Called (last hour)",
+          "description": "Cumulative invocations by tool over the selected window. Identifies dominant tools and potential God-agent drift.",
+          "type": "barchart",
+          "gridPos": { "x": 12, "y": 1, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "topk(10, sum by (tool_name, tool_provider) (increase(kagent_tools_mcp_invocations_total{tool_provider=~\"$tool_provider\"}[$__range])))",
+              "legendFormat": "{{tool_provider}} / {{tool_name}}",
+              "instant": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "color": { "mode": "palette-classic" }
+            },
+            "overrides": []
+          },
+          "options": {
+            "orientation": "horizontal",
+            "legend": { "displayMode": "list", "placement": "bottom" },
+            "tooltip": { "mode": "single" }
+          }
+        },
+        {
+          "id": 4,
+          "title": "Registered MCP Tools by Provider",
+          "description": "Count of registered tools per provider. Sudden drops may indicate MCP server crashes or failed tool registration.",
+          "type": "stat",
+          "gridPos": { "x": 0, "y": 9, "w": 8, "h": 5 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "count by (tool_provider) (kagent_tools_mcp_registered_tools)",
+              "legendFormat": "{{tool_provider}}",
+              "instant": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "color": { "mode": "palette-classic" },
+              "thresholds": { "mode": "absolute", "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 1 }
+              ]}
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"] },
+            "orientation": "horizontal",
+            "colorMode": "background",
+            "graphMode": "none",
+            "textMode": "value_and_name"
+          }
+        },
+        {
+          "id": 5,
+          "title": "Total Registered Tools",
+          "description": "Total unique MCP tools available across all providers. Alert: drop below 10 indicates systemic tool registration failure.",
+          "type": "stat",
+          "gridPos": { "x": 8, "y": 9, "w": 4, "h": 5 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "count(kagent_tools_mcp_registered_tools)",
+              "legendFormat": "Total Tools",
+              "instant": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "color": { "mode": "thresholds" },
+              "thresholds": { "mode": "absolute", "steps": [
+                { "color": "red", "value": null },
+                { "color": "yellow", "value": 10 },
+                { "color": "green", "value": 20 }
+              ]}
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"] },
+            "colorMode": "background",
+            "graphMode": "none",
+            "textMode": "value_and_name"
+          }
+        },
+        {
+          "id": 6,
+          "title": "MCP Tool Call Error Rate",
+          "description": "Rate of tool call errors. Any sustained non-zero value requires investigation of the specific tool_name and tool_provider.",
+          "type": "timeseries",
+          "gridPos": { "x": 12, "y": 9, "w": 12, "h": 5 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum by (tool_name, tool_provider) (rate(kagent_tools_mcp_invocations_total{status=~\"error|failed\",tool_provider=~\"$tool_provider\"}[5m])) * 60",
+              "legendFormat": "{{tool_provider}} / {{tool_name}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqpm",
+              "color": { "fixedColor": "red", "mode": "fixed" },
+              "custom": { "lineWidth": 1.5 }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["max"] },
+            "tooltip": { "mode": "multi" }
+          }
+        },
+        {
+          "id": 10,
+          "title": "Section: agentgateway Controller Health",
+          "type": "row",
+          "gridPos": { "x": 0, "y": 14, "w": 24, "h": 1 },
+          "collapsed": false,
+          "panels": []
+        },
+        {
+          "id": 11,
+          "title": "Controller Reconcile Rate (ops/min)",
+          "description": "Rate of Kubernetes controller reconciliation loops for Gateway and GatewayClass controllers. Elevated rate indicates frequent resource churn.",
+          "type": "timeseries",
+          "gridPos": { "x": 0, "y": 15, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum by (controller) (rate(agentgateway_controller_reconciliations_total[5m])) * 60",
+              "legendFormat": "{{controller}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqpm",
+              "color": { "mode": "palette-classic" },
+              "custom": { "lineWidth": 1.5, "fillOpacity": 8 }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+            "tooltip": { "mode": "multi" }
+          }
+        },
+        {
+          "id": 12,
+          "title": "Controller Reconcile Latency p50/p95/p99 (seconds)",
+          "description": "Reconcile loop latency per controller. p99 > 1s indicates the controller is struggling to keep up with API server events.",
+          "type": "timeseries",
+          "gridPos": { "x": 12, "y": 15, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.50, sum by (le, controller) (rate(agentgateway_controller_reconcile_duration_seconds_bucket[5m])))",
+              "legendFormat": "p50 {{controller}}"
+            },
+            {
+              "expr": "histogram_quantile(0.95, sum by (le, controller) (rate(agentgateway_controller_reconcile_duration_seconds_bucket[5m])))",
+              "legendFormat": "p95 {{controller}}"
+            },
+            {
+              "expr": "histogram_quantile(0.99, sum by (le, controller) (rate(agentgateway_controller_reconcile_duration_seconds_bucket[5m])))",
+              "legendFormat": "p99 {{controller}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "color": { "mode": "palette-classic" },
+              "custom": { "lineWidth": 1.5 },
+              "thresholds": { "mode": "absolute", "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 0.5 },
+                { "color": "red", "value": 1.0 }
+              ]}
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+            "tooltip": { "mode": "multi" }
+          }
+        },
+        {
+          "id": 13,
+          "title": "Active Reconciliations",
+          "description": "Number of controller reconciliation loops currently in flight. Sustained high value (> 5) may indicate a reconcile deadlock.",
+          "type": "gauge",
+          "gridPos": { "x": 0, "y": 23, "w": 6, "h": 5 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum(agentgateway_controller_reconciliations_running)",
+              "legendFormat": "Running",
+              "instant": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "min": 0, "max": 10,
+              "color": { "mode": "thresholds" },
+              "thresholds": { "mode": "absolute", "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 3 },
+                { "color": "red", "value": 7 }
+              ]}
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"] },
+            "showThresholdLabels": false,
+            "showThresholdMarkers": true
+          }
+        },
+        {
+          "id": 14,
+          "title": "XDS Auth Success Rate",
+          "description": "Ratio of successful XDS authentication requests over total XDS auth attempts. Below 99% warrants investigation of mTLS/credential config.",
+          "type": "gauge",
+          "gridPos": { "x": 6, "y": 23, "w": 6, "h": 5 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "(sum(agentgateway_xds_auth_rq_success_total) / sum(agentgateway_xds_auth_rq_total)) * 100",
+              "legendFormat": "XDS Auth %",
+              "instant": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0, "max": 100,
+              "color": { "mode": "thresholds" },
+              "thresholds": { "mode": "absolute", "steps": [
+                { "color": "red", "value": null },
+                { "color": "yellow", "value": 95 },
+                { "color": "green", "value": 99 }
+              ]}
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"] },
+            "showThresholdLabels": false,
+            "showThresholdMarkers": true
+          }
+        },
+        {
+          "id": 15,
+          "title": "XDS Auth Requests (total vs success)",
+          "description": "Cumulative XDS auth total and success over time. Gaps between the two lines indicate auth failures on the data plane.",
+          "type": "timeseries",
+          "gridPos": { "x": 12, "y": 23, "w": 12, "h": 5 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "rate(agentgateway_xds_auth_rq_total[5m]) * 60",
+              "legendFormat": "Total (req/min)"
+            },
+            {
+              "expr": "rate(agentgateway_xds_auth_rq_success_total[5m]) * 60",
+              "legendFormat": "Success (req/min)"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqpm",
+              "color": { "mode": "palette-classic" },
+              "custom": { "lineWidth": 1.5 }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["last"] },
+            "tooltip": { "mode": "multi" }
+          }
+        },
+        {
+          "id": 20,
+          "title": "Section: Edge Security (Traefik + Input Guardrail)",
+          "type": "row",
+          "gridPos": { "x": 0, "y": 28, "w": 24, "h": 1 },
+          "collapsed": false,
+          "panels": []
+        },
+        {
+          "id": 21,
+          "title": "Edge Rejection Rate — Input Guardrail (403/min)",
+          "description": "Rate of requests blocked by the input-guardrail ForwardAuth sidecar (HTTP 403). Sustained spikes may indicate a prompt injection campaign.",
+          "type": "timeseries",
+          "gridPos": { "x": 0, "y": 29, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum by (entrypoint) (rate(traefik_entrypoint_requests_total{code=\"403\",entrypoint=\"web\"}[5m])) * 60",
+              "legendFormat": "403 / {{entrypoint}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqpm",
+              "color": { "fixedColor": "red", "mode": "fixed" },
+              "custom": { "lineWidth": 1.5, "fillOpacity": 10 },
+              "thresholds": { "mode": "absolute", "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 1 },
+                { "color": "red", "value": 5 }
+              ]}
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["max"] },
+            "tooltip": { "mode": "multi" }
+          }
+        },
+        {
+          "id": 22,
+          "title": "Traefik Router Requests — kagent Routes",
+          "description": "Total request rate through Traefik routers matching kagent and agentgateway. Breakdown by router shows traffic distribution.",
+          "type": "timeseries",
+          "gridPos": { "x": 12, "y": 29, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum by (router) (rate(traefik_router_requests_total{router=~\"kagent.*|agentgateway.*\"}[5m])) * 60",
+              "legendFormat": "{{router}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqpm",
+              "color": { "mode": "palette-classic" },
+              "custom": { "lineWidth": 1.5 }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+            "tooltip": { "mode": "multi" }
+          }
+        },
+        {
+          "id": 23,
+          "title": "Fast-Path Coverage % (target > 80%)",
+          "description": "Fraction of kagent requests that bypass the guardrail sidecar (fast-path). Below 80% means the guardrail is being invoked excessively — possible misconfiguration.",
+          "type": "gauge",
+          "gridPos": { "x": 0, "y": 37, "w": 8, "h": 5 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "(sum(traefik_router_requests_total{router=~\"kagent.*\",service!~\".*guardrail.*\"}) / sum(traefik_router_requests_total{router=~\"kagent.*\"})) * 100",
+              "legendFormat": "Fast-path %",
+              "instant": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0, "max": 100,
+              "color": { "mode": "thresholds" },
+              "thresholds": { "mode": "absolute", "steps": [
+                { "color": "red", "value": null },
+                { "color": "yellow", "value": 60 },
+                { "color": "green", "value": 80 }
+              ]}
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"] },
+            "showThresholdLabels": false,
+            "showThresholdMarkers": true
+          }
+        },
+        {
+          "id": 24,
+          "title": "Traefik HTTP Status Codes — kagent/agentgateway",
+          "description": "HTTP response code breakdown for kagent and agentgateway routers. Watch for sustained 4xx/5xx growth.",
+          "type": "timeseries",
+          "gridPos": { "x": 8, "y": 37, "w": 16, "h": 5 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum by (code) (rate(traefik_router_requests_total{router=~\"kagent.*|agentgateway.*\"}[5m])) * 60",
+              "legendFormat": "HTTP {{code}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqpm",
+              "color": { "mode": "palette-classic" },
+              "custom": { "lineWidth": 1.5 }
+            },
+            "overrides": [
+              {
+                "matcher": { "id": "byRegexp", "options": ".*4[0-9]{2}.*" },
+                "properties": [{ "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }]
+              },
+              {
+                "matcher": { "id": "byRegexp", "options": ".*5[0-9]{2}.*" },
+                "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+              }
+            ]
+          },
+          "options": {
+            "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["sum"] },
+            "tooltip": { "mode": "multi" }
+          }
+        },
+        {
+          "id": 30,
+          "title": "Section: Process & Go Runtime Health",
+          "type": "row",
+          "gridPos": { "x": 0, "y": 42, "w": 24, "h": 1 },
+          "collapsed": false,
+          "panels": []
+        },
+        {
+          "id": 31,
+          "title": "CPU Usage (seconds/second)",
+          "description": "CPU consumption rate for kagent and agentgateway processes. Sustained > 0.5 on local dev cluster warrants resource limit tuning.",
+          "type": "timeseries",
+          "gridPos": { "x": 0, "y": 43, "w": 8, "h": 7 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "rate(process_cpu_seconds_total{namespace=\"kagent\"}[5m])",
+              "legendFormat": "kagent ({{pod}})"
+            },
+            {
+              "expr": "rate(process_cpu_seconds_total{namespace=\"agentgateway-system\"}[5m])",
+              "legendFormat": "agentgateway ({{pod}})"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s/s",
+              "color": { "mode": "palette-classic" },
+              "custom": { "lineWidth": 1.5, "fillOpacity": 8 }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+            "tooltip": { "mode": "multi" }
+          }
+        },
+        {
+          "id": 32,
+          "title": "Heap Memory In-Use",
+          "description": "Go heap memory actively in use. Steady upward trend that never drops on GC cycles indicates a memory leak.",
+          "type": "timeseries",
+          "gridPos": { "x": 8, "y": 43, "w": 8, "h": 7 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "go_memstats_heap_inuse_bytes{namespace=\"kagent\"}",
+              "legendFormat": "kagent heap ({{pod}})"
+            },
+            {
+              "expr": "go_memstats_heap_inuse_bytes{namespace=\"agentgateway-system\"}",
+              "legendFormat": "agentgateway heap ({{pod}})"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bytes",
+              "color": { "mode": "palette-classic" },
+              "custom": { "lineWidth": 1.5 }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+            "tooltip": { "mode": "multi" }
+          }
+        },
+        {
+          "id": 33,
+          "title": "Goroutine Count",
+          "description": "Number of running goroutines. Sharp unbounded growth indicates goroutine leak — common in gRPC/watch loops that lose cancellation context.",
+          "type": "timeseries",
+          "gridPos": { "x": 16, "y": 43, "w": 8, "h": 7 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "go_goroutines{namespace=\"kagent\"}",
+              "legendFormat": "kagent ({{pod}})"
+            },
+            {
+              "expr": "go_goroutines{namespace=\"agentgateway-system\"}",
+              "legendFormat": "agentgateway ({{pod}})"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "color": { "mode": "palette-classic" },
+              "custom": { "lineWidth": 1.5 },
+              "thresholds": { "mode": "absolute", "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 500 },
+                { "color": "red", "value": 1000 }
+              ]}
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["last", "max"] },
+            "tooltip": { "mode": "multi" }
+          }
+        },
+        {
+          "id": 34,
+          "title": "GC Duration p99 (seconds)",
+          "description": "99th percentile GC pause duration. Pauses > 10ms impact real-time agent response latency.",
+          "type": "timeseries",
+          "gridPos": { "x": 0, "y": 50, "w": 12, "h": 6 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.99, sum by (le, namespace, pod) (rate(go_gc_duration_seconds_bucket{namespace=~\"kagent|agentgateway-system\"}[5m])))",
+              "legendFormat": "p99 GC — {{namespace}} {{pod}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "color": { "mode": "palette-classic" },
+              "custom": { "lineWidth": 1.5 },
+              "thresholds": { "mode": "absolute", "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 0.01 },
+                { "color": "red", "value": 0.05 }
+              ]}
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+            "tooltip": { "mode": "multi" }
+          }
+        },
+        {
+          "id": 35,
+          "title": "Resident Memory (RSS)",
+          "description": "OS-level resident set size. Higher than heap_inuse includes stack, runtime, cgo allocations. Use to right-size container memory limits.",
+          "type": "timeseries",
+          "gridPos": { "x": 12, "y": 50, "w": 12, "h": 6 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "process_resident_memory_bytes{namespace=~\"kagent|agentgateway-system\"}",
+              "legendFormat": "RSS — {{namespace}} {{pod}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bytes",
+              "color": { "mode": "palette-classic" },
+              "custom": { "lineWidth": 1.5 }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["last", "max"] },
+            "tooltip": { "mode": "multi" }
+          }
+        },
+        {
+          "id": 40,
+          "title": "Section: OTel Traces — Jaeger Links",
+          "type": "row",
+          "gridPos": { "x": 0, "y": 56, "w": 24, "h": 1 },
+          "collapsed": false,
+          "panels": []
+        },
+        {
+          "id": 41,
+          "title": "OTel Collector — Spans Received (spans/sec)",
+          "description": "Rate of spans arriving at the OpenTelemetry Collector from kagent-controller and agentgateway-proxy. A drop to zero means the OTLP exporter is disconnected.",
+          "type": "timeseries",
+          "gridPos": { "x": 0, "y": 57, "w": 12, "h": 7 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "rate(otelcol_receiver_accepted_spans_total{namespace=\"monitoring\"}[5m])",
+              "legendFormat": "accepted — {{receiver}}"
+            },
+            {
+              "expr": "rate(otelcol_receiver_refused_spans_total{namespace=\"monitoring\"}[5m])",
+              "legendFormat": "refused — {{receiver}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "color": { "mode": "palette-classic" },
+              "custom": { "lineWidth": 1.5, "fillOpacity": 8 }
+            },
+            "overrides": [
+              {
+                "matcher": { "id": "byRegexp", "options": "refused.*" },
+                "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+              }
+            ]
+          },
+          "options": {
+            "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+            "tooltip": { "mode": "multi" }
+          }
+        },
+        {
+          "id": 42,
+          "title": "OTel Collector — Spans Exported to Jaeger (spans/sec)",
+          "description": "Rate of spans successfully forwarded to Jaeger. Divergence from received rate indicates export drops — check Jaeger health.",
+          "type": "timeseries",
+          "gridPos": { "x": 12, "y": 57, "w": 12, "h": 7 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "rate(otelcol_exporter_sent_spans_total{namespace=\"monitoring\",exporter=~\"otlp.*jaeger.*|otlp/jaeger\"}[5m])",
+              "legendFormat": "sent — {{exporter}}"
+            },
+            {
+              "expr": "rate(otelcol_exporter_send_failed_spans_total{namespace=\"monitoring\"}[5m])",
+              "legendFormat": "failed — {{exporter}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "color": { "mode": "palette-classic" },
+              "custom": { "lineWidth": 1.5 }
+            },
+            "overrides": [
+              {
+                "matcher": { "id": "byRegexp", "options": "failed.*" },
+                "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+              }
+            ]
+          },
+          "options": {
+            "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+            "tooltip": { "mode": "multi" }
+          }
+        },
+        {
+          "id": 43,
+          "title": "Trace Explorer Links",
+          "type": "text",
+          "gridPos": { "x": 0, "y": 64, "w": 24, "h": 5 },
+          "options": {
+            "mode": "markdown",
+            "content": "## A2A End-to-End Trace Explorer\n\n| Service | Jaeger Link |\n|---|---|\n| **kagent-controller** | [Open traces →](http://jaeger.local/search?service=kagent-controller) |\n| **agentgateway-proxy** | [Open traces →](http://jaeger.local/search?service=agentgateway-proxy) |\n\n**Workflow**: select a trace in Jaeger → expand spans to see the full A2A delegation chain (coordinator → subagent → tool call). OTLP sampling is set to **100%** — every request produces a trace.\n\n> **Tip**: correlate a Loki log event with a trace by copying the `traceID` field from the log line and pasting it into Jaeger's *Trace ID* search box."
+          }
+        }
+      ]
+    }

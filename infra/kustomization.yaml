@@ -3,3 +3,4 @@ kind: Kustomization
 resources:
   - folder.yaml
   - dashboards/agentic-ai/dashboard.yaml
+  - dashboards/agentic-ai/kagent-agentgateway.yaml
