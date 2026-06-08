@@ -4,3 +4,4 @@ resources:
   - folder.yaml
   - dashboards/agentic-ai/dashboard.yaml
   - dashboards/agentic-ai/kagent-agentgateway.yaml
+  - dashboards/agentic-ai/kagent-incident-pipeline.yaml
