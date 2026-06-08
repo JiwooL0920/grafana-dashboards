@@ -1,0 +1,360 @@
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDashboard
+metadata:
+  name: kagent-incident-pipeline
+  namespace: monitoring
+spec:
+  instanceSelector:
+    matchLabels:
+      dashboards: grafana
+  folderRef: agentic-ai
+  resyncPeriod: 30s
+  json: >
+    {
+      "title": "kagent Incident Pipeline",
+      "uid": "kagent-incident-pipeline",
+      "tags": [
+        "kagent",
+        "incident",
+        "pipeline",
+        "loki",
+        "jaeger"
+      ],
+      "timezone": "browser",
+      "schemaVersion": 38,
+      "version": 1,
+      "refresh": "30s",
+      "time": {
+        "from": "now-1h",
+        "to": "now"
+      },
+      "templating": {
+        "list": [
+          {
+            "name": "namespace",
+            "type": "custom",
+            "label": "Namespace",
+            "query": "kagent",
+            "current": {
+              "text": "kagent",
+              "value": "kagent"
+            },
+            "options": [
+              {
+                "text": "kagent",
+                "value": "kagent",
+                "selected": true
+              }
+            ]
+          },
+          {
+            "name": "workflow_id",
+            "type": "textbox",
+            "label": "Workflow ID (regex)",
+            "query": ".*",
+            "current": {
+              "text": ".*",
+              "value": ".*"
+            }
+          },
+          {
+            "name": "timerange",
+            "type": "custom",
+            "label": "Window",
+            "query": "15m,30m,1h,6h,24h",
+            "current": {
+              "text": "1h",
+              "value": "1h"
+            },
+            "options": [
+              {
+                "text": "15m",
+                "value": "15m"
+              },
+              {
+                "text": "30m",
+                "value": "30m"
+              },
+              {
+                "text": "1h",
+                "value": "1h",
+                "selected": true
+              },
+              {
+                "text": "6h",
+                "value": "6h"
+              },
+              {
+                "text": "24h",
+                "value": "24h"
+              }
+            ]
+          }
+        ]
+      },
+      "panels": [
+        {
+          "id": 1,
+          "title": "1) alertmanager-hook events (Loki)",
+          "type": "logs",
+          "gridPos": {
+            "x": 0,
+            "y": 0,
+            "w": 20,
+            "h": 8
+          },
+          "datasource": "Loki",
+          "targets": [
+            {
+              "expr": "{namespace=\"$namespace\", container=\"alertmanager-hook\"} |= \"$workflow_id\" | logfmt | line_format \"workflow_id={{.workflow_id}} agent_target={{.agent_target}}{{.agent}} severity={{.severity}} msg={{.msg}}\""
+            }
+          ],
+          "options": {
+            "showLabels": true,
+            "showTime": true,
+            "wrapLogMessage": true,
+            "dedupStrategy": "none",
+            "sortOrder": "Descending"
+          }
+        },
+        {
+          "id": 2,
+          "title": "1) alertmanager-hook count ($timerange)",
+          "type": "stat",
+          "gridPos": {
+            "x": 20,
+            "y": 0,
+            "w": 4,
+            "h": 8
+          },
+          "datasource": "Loki",
+          "targets": [
+            {
+              "expr": "sum(count_over_time({namespace=\"$namespace\", container=\"alertmanager-hook\"} |= \"$workflow_id\" [$timerange]))",
+              "legendFormat": "events"
+            }
+          ],
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "values": false
+            }
+          }
+        },
+        {
+          "id": 3,
+          "title": "2) stream-dispatcher events (Loki)",
+          "type": "logs",
+          "gridPos": {
+            "x": 0,
+            "y": 8,
+            "w": 20,
+            "h": 8
+          },
+          "datasource": "Loki",
+          "targets": [
+            {
+              "expr": "{namespace=\"$namespace\", container=\"stream-dispatcher\"} |= \"$workflow_id\" | logfmt | line_format \"workflow_id={{.workflow_id}}{{.contextID}} agent={{.agent}} state={{.state}} msg={{.msg}}\""
+            }
+          ],
+          "options": {
+            "showLabels": true,
+            "showTime": true,
+            "wrapLogMessage": true,
+            "dedupStrategy": "none",
+            "sortOrder": "Descending"
+          }
+        },
+        {
+          "id": 4,
+          "title": "2) stream-dispatcher count ($timerange)",
+          "type": "stat",
+          "gridPos": {
+            "x": 20,
+            "y": 8,
+            "w": 4,
+            "h": 8
+          },
+          "datasource": "Loki",
+          "targets": [
+            {
+              "expr": "sum(count_over_time({namespace=\"$namespace\", container=\"stream-dispatcher\"} |= \"$workflow_id\" [$timerange]))",
+              "legendFormat": "events"
+            }
+          ],
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "values": false
+            }
+          }
+        },
+        {
+          "id": 5,
+          "title": "3) AgentGateway A2A routing (Loki)",
+          "type": "logs",
+          "gridPos": {
+            "x": 0,
+            "y": 16,
+            "w": 20,
+            "h": 8
+          },
+          "datasource": "Loki",
+          "targets": [
+            {
+              "expr": "{namespace=\"agentgateway-system\"} |~ \"/agents/.*\" | logfmt | line_format \"trace.id={{.trace_id}} http.status={{.http_status}} duration={{.duration}} route={{.route}} path={{.http_path}} msg={{.msg}}\""
+            }
+          ],
+          "options": {
+            "showLabels": true,
+            "showTime": true,
+            "wrapLogMessage": true,
+            "dedupStrategy": "none",
+            "sortOrder": "Descending"
+          }
+        },
+        {
+          "id": 6,
+          "title": "3) A2A routed requests ($timerange)",
+          "type": "stat",
+          "gridPos": {
+            "x": 20,
+            "y": 16,
+            "w": 4,
+            "h": 8
+          },
+          "datasource": "Loki",
+          "targets": [
+            {
+              "expr": "sum(count_over_time({namespace=\"agentgateway-system\"} |~ \"/agents/.*\" [$timerange]))",
+              "legendFormat": "requests"
+            }
+          ],
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "values": false
+            }
+          }
+        },
+        {
+          "id": 7,
+          "title": "4) triage-agent sessions (Loki)",
+          "type": "logs",
+          "gridPos": {
+            "x": 0,
+            "y": 24,
+            "w": 20,
+            "h": 8
+          },
+          "datasource": "Loki",
+          "targets": [
+            {
+              "expr": "{namespace=\"$namespace\", container=\"triage-agent\"} |= \"$workflow_id\" | logfmt | line_format \"workflow_id={{.workflow_id}}{{.contextID}} msg={{.msg}} tool={{.tool}} verdict={{.verdict}}\""
+            }
+          ],
+          "options": {
+            "showLabels": true,
+            "showTime": true,
+            "wrapLogMessage": true,
+            "dedupStrategy": "none",
+            "sortOrder": "Descending"
+          }
+        },
+        {
+          "id": 8,
+          "title": "4) triage-agent events ($timerange)",
+          "type": "stat",
+          "gridPos": {
+            "x": 20,
+            "y": 24,
+            "w": 4,
+            "h": 8
+          },
+          "datasource": "Loki",
+          "targets": [
+            {
+              "expr": "sum(count_over_time({namespace=\"$namespace\", container=\"triage-agent\"} |= \"$workflow_id\" [$timerange]))",
+              "legendFormat": "events"
+            }
+          ],
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "values": false
+            }
+          }
+        },
+        {
+          "id": 9,
+          "title": "5) Pipeline rates (Prometheus)",
+          "type": "timeseries",
+          "gridPos": {
+            "x": 0,
+            "y": 32,
+            "w": 20,
+            "h": 8
+          },
+          "datasource": "Prometheus",
+          "targets": [
+            {
+              "expr": "sum(rate(http_requests_total{service=\"alertmanager-hook\"}[5m]))",
+              "legendFormat": "alertmanager-hook webhook rate"
+            },
+            {
+              "expr": "sum(rate(redis_stream_messages_published_total[5m]))",
+              "legendFormat": "redis stream publish rate"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps"
+            }
+          }
+        },
+        {
+          "id": 10,
+          "title": "5) Component readiness (Prometheus)",
+          "type": "stat",
+          "gridPos": {
+            "x": 20,
+            "y": 32,
+            "w": 4,
+            "h": 8
+          },
+          "datasource": "Prometheus",
+          "targets": [
+            {
+              "expr": "sum(up{namespace=~\"$namespace|agentgateway-system\", pod=~\".*(alertmanager-hook|stream-dispatcher|triage-agent|kagent-controller|agentgateway).*\"})",
+              "legendFormat": "up targets"
+            }
+          ],
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "values": false
+            }
+          }
+        }
+      ]
+    }
